@@ -1,4 +1,4 @@
-from typing import Any, List, Tuple, Union
+from typing import Any, Optional, Tuple, Union
 import math
 
 import torch
@@ -27,32 +27,6 @@ def spike(x: torch.Tensor) -> torch.Tensor:
 
 
 class PLIF(nn.Module):
-    def __init__(self, shape: List[int], a_0: float):
-        super().__init__()
-
-        # Shared between neurons in a layer
-        self.a = nn.Parameter(torch.tensor(a_0))
-        # Just for convenience
-        self.register_buffer("thresh", torch.tensor(1.0))
-        # Opted for saving state here instead of in network
-        self.register_buffer("v", torch.zeros(*shape))
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Hidden state update
-        # Sigmoid to prevent numerical instability
-        h = self.v + 1.0 / torch.sigmoid(self.a) * (-self.v + x)
-        s = spike(h - self.thresh)
-        # Hard reset; detach as suggested by Zenke 2021
-        self.v = h * (1.0 - s.detach())
-        return s
-
-    def reset(self):
-        # XXX: is this needed?
-        with torch.no_grad():
-            self.v.fill_(0)
-
-
-class StatelessPLIF(nn.Module):
     def __init__(self, a_0: float):
         super().__init__()
 
@@ -62,7 +36,7 @@ class StatelessPLIF(nn.Module):
         self.register_buffer("thresh", torch.tensor(1.0))
 
     def forward(
-        self, x: torch.Tensor, v: Union[torch.Tensor, None]
+        self, x: torch.Tensor, v: Optional[torch.Tensor] = None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         # Get state
         if v is None:
@@ -75,39 +49,3 @@ class StatelessPLIF(nn.Module):
         # Hard reset; detach as suggested by Zenke 2021
         v = h * (1.0 - z.detach())
         return z, v
-
-
-class StatelessPLIFScripted(nn.Module):
-    def __init__(self, a_0: float):
-        super().__init__()
-
-        # Shared between neurons in a layer
-        self.a = nn.Parameter(torch.tensor(a_0))
-        # Just for convenience
-        self.register_buffer("thresh", torch.tensor(1.0))
-
-    def forward(
-        self, x: torch.Tensor, v: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        # Get state
-        if v.dim() == 0:
-            v = torch.zeros_like(x)
-
-        # Hidden state update
-        # Sigmoid to prevent numerical instability
-        h = v + 1.0 / torch.sigmoid(self.a) * (-v + x)
-        z = spike(h - self.thresh)
-        # Hard reset; detach as suggested by Zenke 2021
-        v = h * (1.0 - z.detach())
-        return z, v
-
-
-class Dummy(nn.Module):
-    def __init__(self, shape: List[int]):
-        super().__init__()
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return x
-
-    def reset(self):
-        pass

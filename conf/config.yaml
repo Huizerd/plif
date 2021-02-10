@@ -10,14 +10,14 @@ defaults:
 trainer:
   default_root_dir: wandb  # save checkpoints in wandb folder
   gpus: -1                 # number of gpus, -1 means all
-  max_epochs: 200          # max epochs
+  max_epochs: 100          # max epochs
   weights_summary: Null    # no weights summary to have jit work
 
 training:
   seed: Null
-  script: False  # use torch.jit.script
+  script: True  # use TorchScript (tiny bit faster)
   seq_len: 8
-  batch_size: 16
+  batch_size: 128
   lr: 1e-3  # separate from optimizer to work with auto_lr_find
   optimizer:
     _target_: torch.optim.Adam

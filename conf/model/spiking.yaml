@@ -1,3 +1,3 @@
 # @package _group_
-_target_: plif.model.StatelessSNN
+_target_: plif.model.SNN
 seq_len: ${training.seq_len}

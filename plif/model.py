@@ -1,4 +1,4 @@
-from collections import OrderedDict
+from typing import List, Optional
 
 import torch
 import torch.jit as jit
@@ -7,8 +7,6 @@ import torch.nn.functional as F
 import pytorch_lightning as pl
 from hydra.utils import instantiate
 from omegaconf import DictConfig
-
-from plif.utils import SequentialState
 
 
 class SNN(nn.Module):
@@ -32,157 +30,71 @@ class SNN(nn.Module):
         self.encoder = instantiate(encoder)
 
         # Conv block 1
-        self.conv1 = nn.Sequential(
-            OrderedDict(
-                [
-                    # No biases anywhere
-                    ("conv", nn.Conv2d(1, 128, 3, 1, bias=False)),
-                    # Batch norm per-channel, so identical for all timesteps
-                    ("bn", nn.BatchNorm2d(128)),
-                    ("plif", instantiate(neuron, [128, 26, 26])),
-                    ("pool", nn.MaxPool2d(2, 2)),
-                ]
-            )
-        )
+        # No biases anywhere
+        self.conv1 = nn.Conv2d(1, 128, 3, 1, bias=False)
+        # Batch norm per-channel, so identical for all timesteps
+        self.bn1 = nn.BatchNorm2d(128)
+        self.plif1 = instantiate(neuron)
+        self.pool1 = nn.MaxPool2d(2, 2)
 
         # Conv block 2
-        self.conv2 = nn.Sequential(
-            OrderedDict(
-                [
-                    ("conv", nn.Conv2d(128, 128, 3, 1, bias=False)),
-                    ("bn", nn.BatchNorm2d(128)),
-                    ("plif", instantiate(neuron, [128, 11, 11])),
-                    ("pool", nn.MaxPool2d(2, 2)),
-                    ("do", nn.Dropout2d()),
-                ]
-            )
-        )
+        self.conv2 = nn.Conv2d(128, 128, 3, 1, bias=False)
+        self.bn2 = nn.BatchNorm2d(128)
+        self.plif2 = instantiate(neuron)
+        self.pool2 = nn.MaxPool2d(2, 2)
+        self.do1 = nn.Dropout2d()
 
         # FC block
-        self.fc = nn.Sequential(
-            OrderedDict(
-                [
-                    ("fc1", nn.Linear(128 * 5 * 5, 2048, bias=False)),
-                    ("plif1", instantiate(neuron, [2048])),
-                    ("do", nn.Dropout()),
-                    ("fc2", nn.Linear(2048, 100, bias=False)),
-                    ("plif2", instantiate(neuron, [100])),
-                ]
-            )
-        )
+        self.fc1 = nn.Linear(128 * 5 * 5, 2048, bias=False)
+        self.plif3 = instantiate(neuron)
+        self.do2 = nn.Dropout()
+        self.fc2 = nn.Linear(2048, 100, bias=False)
+        self.plif4 = instantiate(neuron)
 
         # Decoder
-        # XXX: pool only spatially?
+        # Pools spatially
         self.decoder = instantiate(decoder)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x_in: torch.Tensor) -> torch.Tensor:
         # (batch, channel, height, width)
-        batch, _, _, _ = x.shape
+        batch, _, _, _ = x_in.shape
 
-        # Reset neurons
-        # TODO: make nicer
-        self.conv1.plif.reset()
-        self.conv2.plif.reset()
-        self.fc.plif1.reset()
-        self.fc.plif2.reset()
-
-        # out = []
-
+        s1: Optional[torch.Tensor] = None
+        s2: Optional[torch.Tensor] = None
+        s3: Optional[torch.Tensor] = None
+        s4: Optional[torch.Tensor] = None
+        out: List[torch.Tensor] = []
         for _ in range(self.seq_len):
-            s = self.encoder(x)
-            s = self.conv1(s)
-            s = self.conv2(s)
-            s = s.view(batch, -1)
-            s = self.fc(s)
-            s = s.view(batch, 1, -1)
-            # XXX: or also pool temporally?
-            # out.append(self.decoder(s))
-            s = self.decoder(s)
+            # Encoder
+            x = self.encoder(x_in)
 
-        return s.view(batch, -1)
-        # return torch.stack(out).mean(0).view(batch, -1)
+            # Conv block 1
+            x = self.conv1(x)
+            x = self.bn1(x)
+            z, s1 = self.plif1(x, s1)
+            x = self.pool1(z)
 
+            # Conv block 2
+            x = self.conv2(x)
+            x = self.bn2(x)
+            z, s2 = self.plif2(x, s2)
+            x = self.pool2(z)
+            x = self.do1(x)
 
-class StatelessSNN(nn.Module):
-    """
-    Architecture used for *MNIST datasets, with stateless neurons.
-    """
+            # FC block
+            x = x.view(batch, -1)
+            x = self.fc1(x)
+            z, s3 = self.plif3(x, s3)
+            x = self.do2(z)
+            x = self.fc2(x)
+            z, s4 = self.plif4(x, s4)
 
-    def __init__(
-        self,
-        seq_len: int,
-        encoder: DictConfig,
-        neuron: DictConfig,
-        decoder: DictConfig,
-    ):
-        super().__init__()
-
-        # Number of time steps
-        self.seq_len = seq_len
-
-        # Encoder
-        self.encoder = instantiate(encoder)
-
-        # Conv block 1
-        self.conv1 = SequentialState(
-            OrderedDict(
-                [
-                    # No biases anywhere
-                    ("conv", nn.Conv2d(1, 128, 3, 1, bias=False)),
-                    # Batch norm per-channel, so identical for all timesteps
-                    ("bn", nn.BatchNorm2d(128)),
-                    ("plif", instantiate(neuron)),
-                    ("pool", nn.MaxPool2d(2, 2)),
-                ]
-            )
-        )
-
-        # Conv block 2
-        self.conv2 = SequentialState(
-            OrderedDict(
-                [
-                    ("conv", nn.Conv2d(128, 128, 3, 1, bias=False)),
-                    ("bn", nn.BatchNorm2d(128)),
-                    ("plif", instantiate(neuron)),
-                    ("pool", nn.MaxPool2d(2, 2)),
-                    ("do", nn.Dropout2d()),
-                ]
-            )
-        )
-
-        # FC block
-        self.fc = SequentialState(
-            OrderedDict(
-                [
-                    ("fc1", nn.Linear(128 * 5 * 5, 2048, bias=False)),
-                    ("plif1", instantiate(neuron)),
-                    ("do", nn.Dropout()),
-                    ("fc2", nn.Linear(2048, 100, bias=False)),
-                    ("plif2", instantiate(neuron)),
-                ]
-            )
-        )
-
-        # Decoder
-        # XXX: pool only spatially?
-        self.decoder = instantiate(decoder)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # (batch, channel, height, width)
-        batch, _, _, _ = x.shape
-
-        s_conv1, s_conv2, s_fc = None, None, None
-        for _ in range(self.seq_len):
-            z = self.encoder(x)
-            z, s_conv1 = self.conv1(z, s_conv1)
-            z, s_conv2 = self.conv2(z, s_conv2)
-            z = z.view(batch, -1)
-            z, s_fc = self.fc(z, s_fc)
+            # Decoder
             z = z.view(batch, 1, -1)
-            # XXX: or also pool temporally?
-            z = self.decoder(z)
+            out += [self.decoder(z)]
 
-        return z.view(batch, -1)
+        # Sum over time (temporal pooling)
+        return torch.stack(out).sum(0).view(batch, -1)
 
 
 class SpikingClassifier(pl.LightningModule):

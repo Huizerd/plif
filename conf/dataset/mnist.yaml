@@ -2,4 +2,4 @@
 _target_: pl_bolts.datamodules.MNISTDataModule
 data_dir: ${data_meta.data_dir}
 batch_size: ${training.batch_size}
-num_workers: ${data_meta.num_workers} 
+num_workers: ${data_meta.num_workers}
