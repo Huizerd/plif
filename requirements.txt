@@ -1,0 +1,7 @@
+pre-commit
+torch
+torchvision
+pytorch-lightning
+pytorch-lightning-bolts
+wandb
+hydra-core

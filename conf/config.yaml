@@ -1,0 +1,42 @@
+defaults:
+  - model: spiking
+  - model/encoder: current
+  - model/neuron: plif
+  - model/decoder: avgpool
+  - dataset: mnist
+  - hydra/job_logging: none  # no hydra logging
+  - hydra/hydra_logging: none  # no hydra logging
+
+trainer:
+  default_root_dir: wandb  # save checkpoints in wandb folder
+  gpus: -1                 # number of gpus, -1 means all
+  max_epochs: 200          # max epochs
+  weights_summary: Null    # no weights summary to have jit work
+
+training:
+  seed: Null
+  script: False  # use torch.jit.script
+  seq_len: 8
+  batch_size: 16
+  lr: 1e-3  # separate from optimizer to work with auto_lr_find
+  optimizer:
+    _target_: torch.optim.Adam
+  scheduler:
+    _target_: torch.optim.lr_scheduler.CosineAnnealingLR
+    T_max: 64
+
+data_meta:
+  classes: 10  # this should actually be part of dataset
+  data_dir: data
+  num_workers: 4  # 4-8 seems to be optimal for 1 laptop GPU
+
+logging:
+  project: plif
+  tags: []
+  notes: Null
+  log_model: True  # upload checkpoints to wandb (overwrites default_root_dir)
+
+hydra:
+  output_subdir: Null  # don't create .hydra folder
+  run:
+    dir: .  # don't change working dir

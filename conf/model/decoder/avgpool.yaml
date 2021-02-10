@@ -1,0 +1,4 @@
+# @package _group_
+_target_: plif.decoder.AvgPoolDecoding
+kernel: 10
+stride: 10
