@@ -1,5 +1,5 @@
 defaults:
-  - model: spiking
+  - model: spikingmnist
   - model/encoder: current
   - model/neuron: plif
   - model/decoder: avgpool
@@ -12,6 +12,7 @@ trainer:
   gpus: -1                 # number of gpus, -1 means all
   max_epochs: 100          # max epochs
   weights_summary: Null    # no weights summary to have jit work
+  track_grad_norm: 2
 
 training:
   seed: Null

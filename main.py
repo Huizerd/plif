@@ -2,10 +2,10 @@ import hydra
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
-from hydra.utils import call, instantiate
+from hydra.utils import instantiate
 from omegaconf import OmegaConf
 
-from plif.model import SpikingClassifier
+from plif.model import Classifier
 from plif.utils import zeromean_unitvar_transform
 
 
@@ -27,7 +27,7 @@ def main(cfg):
         cfg.dataset, train_transforms=tf, val_transforms=tf, test_transforms=tf
     )
     # Model
-    model = SpikingClassifier(
+    model = Classifier(
         cfg.model,
         cfg.training.script,
         cfg.training.batch_size,

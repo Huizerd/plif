@@ -9,9 +9,89 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig
 
 
-class SNN(nn.Module):
+class RegularModelMNIST(nn.Module):
     """
-    Architecture used for *MNIST datasets.
+    Regular ANN architecture used for *MNIST datasets.
+    """
+
+    def __init__(
+        self,
+        seq_len: int,
+        encoder: DictConfig,
+        neuron: DictConfig,
+        decoder: DictConfig,
+    ):
+        super().__init__()
+
+        # Number of time steps
+        self.seq_len = seq_len
+
+        # Encoder
+        self.encoder = instantiate(encoder)
+
+        # Conv block 1
+        # No biases anywhere
+        self.conv1 = nn.Conv2d(1, 128, 3, 1, bias=False)
+        # Batch norm per-channel, so identical for all timesteps
+        self.bn1 = nn.BatchNorm2d(128)
+        self.pool1 = nn.MaxPool2d(2, 2)
+
+        # Conv block 2
+        self.conv2 = nn.Conv2d(128, 128, 3, 1, bias=False)
+        self.bn2 = nn.BatchNorm2d(128)
+        self.pool2 = nn.MaxPool2d(2, 2)
+        self.do1 = nn.Dropout2d()
+
+        # FC block
+        self.fc1 = nn.Linear(128 * 5 * 5, 2048, bias=False)
+        self.do2 = nn.Dropout()
+        self.fc2 = nn.Linear(2048, 100, bias=False)
+
+        # Decoder
+        # Pools spatially
+        self.decoder = instantiate(decoder)
+
+    def forward(self, x_in: torch.Tensor) -> torch.Tensor:
+        # (batch, channel, height, width)
+        batch, _, _, _ = x_in.shape
+
+        out: List[torch.Tensor] = []
+        for _ in range(self.seq_len):
+            # Encoder
+            x = self.encoder(x_in)
+
+            # Conv block 1
+            x = self.conv1(x)
+            x = self.bn1(x)
+            x = F.relu(x)
+            x = self.pool1(x)
+
+            # Conv block 2
+            x = self.conv2(x)
+            x = self.bn2(x)
+            x = F.relu(x)
+            x = self.pool2(x)
+            x = self.do1(x)
+
+            # FC block
+            x = x.view(batch, -1)
+            x = self.fc1(x)
+            x = F.relu(x)
+            x = self.do2(x)
+            x = self.fc2(x)
+            x = F.relu(x)
+
+            # Decoder
+            x = x.view(batch, 1, -1)
+            out += [self.decoder(x)]
+
+        # Sum over time (temporal pooling)
+        return torch.stack(out).sum(0).view(batch, -1)
+
+
+class SpikingModelMNIST(nn.Module):
+    """
+    SNN architecture used for *MNIST datasets.
     """
 
     def __init__(
@@ -97,7 +177,7 @@ class SNN(nn.Module):
         return torch.stack(out).sum(0).view(batch, -1)
 
 
-class SpikingClassifier(pl.LightningModule):
+class Classifier(pl.LightningModule):
     def __init__(
         self,
         model: DictConfig,
@@ -141,8 +221,15 @@ class SpikingClassifier(pl.LightningModule):
         logits = self(x)
         loss = F.cross_entropy(logits, y)
 
+        for name, param in self.model.named_parameters():
+            if "plif" in name:
+                self.log(f"{prefix} {name}", param)
+
+        # for name, param in self.model.named_parameters():
+        #     self.log(f"{prefix} {name} grad", param.grad.mean())
+
         self.log(f"{prefix} loss", loss)
-        self.log(f"{prefix} acc", self.accuracy(logits, y))
+        self.log(f"{prefix} acc", self.accuracy(F.softmax(logits, 1), y))
         return loss
 
     def configure_optimizers(self):

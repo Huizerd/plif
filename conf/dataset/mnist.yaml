@@ -1,7 +1,7 @@
 # @package _group_
 _target_: pl_bolts.datamodules.MNISTDataModule
 data_dir: ${data_meta.data_dir}
-batch_size: ${training.batch_size}
 num_workers: ${data_meta.num_workers}
-pin_memory: True
+batch_size: ${training.batch_size}
 shuffle: True
+pin_memory: True

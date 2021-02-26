@@ -22,6 +22,3 @@ Possible discrepancies between this implementation and the paper:
 - Initialization of weights: not described in paper
 - Batch normalization: this paper and [Ledinauskas 2020](http://arxiv.org/abs/2006.04436) seem to describe shared statistics for all timesteps, but some works ([Cooijmans 2017](http://arxiv.org/abs/1603.09025), [Kim 2020](http://arxiv.org/abs/2010.01729)) use separate statistics/parameters
 - Output voting layer: implemented and described as average pooling spatially, but what about the temporal dimension? Sum over time? Average? Take last step only?
-
-To do:
-- Find a nice way to watch learned time constants, spike rates

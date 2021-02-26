@@ -1,3 +1,3 @@
 # @package _group_
-_target_: plif.model.SNN
+_target_: plif.model.RegularModelMNIST
 seq_len: ${training.seq_len}

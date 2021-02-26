@@ -44,7 +44,7 @@ class PLIF(nn.Module):
 
         # Hidden state update
         # Sigmoid to prevent numerical instability
-        h = v + 1.0 / torch.sigmoid(self.a) * (-v + x)
+        h = v + torch.sigmoid(self.a) * (-v + x)
         z = spike(h - self.thresh)
         # Hard reset; detach as suggested by Zenke 2021
         v = h * (1.0 - z.detach())
